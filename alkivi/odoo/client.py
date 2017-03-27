@@ -1,25 +1,20 @@
 """
-OpenERP wrapper that use oerplib
+OpenERP wrapper that use clientlib
 """
 
-import oerplib
-import json
-import time
-import hashlib
-import os
+import odoorpc
+import logging
 import re
-
-from alkivi.logger import logger as _logger
 
 from .config import config
 
-logger = _logger()
 
 class Client(object):
-    """Simple wrapper that use oerplib."""
+    """Simple wrapper that use clientlib."""
 
-    def __init__(self, endpoint=None, protocol=None, port=None, url=None, 
-                 version=None, db=None, user=None, password=None, config_file=None):
+    def __init__(self, endpoint=None, protocol=None, port=None, url=None,
+                 version=None, db=None, user=None, password=None,
+                 config_file=None):
         """
         Creates a new Client.
 
@@ -38,83 +33,89 @@ class Client(object):
         # load keys
         if protocol is None:
             protocol = config.get(endpoint, 'protocol')
-        self._protocol = protocol
 
         if port is None:
             port = config.get(endpoint, 'port')
-        self._port = port
 
         if url is None:
             url = config.get(endpoint, 'url')
-        self._url = url
 
         if db is None:
             db = config.get(endpoint, 'db')
-        self._db = db
+        self.db = db
 
         if user is None:
             user = config.get(endpoint, 'user')
-        self._user = user
+        self.user = user
 
         if password is None:
             password = config.get(endpoint, 'password')
-
+        self.password = password
 
         # First login and keep uid
-        self.oerp = oerplib.OERP(url, protocol=protocol,
-                                 port=port, version=version)
-        self.user = self.oerp.login(user, password, db)
-
-        # Delete password
-        password = None
+        logging.debug('Attempting to connect to {0} using {1}'.format(
+            url,
+            protocol))
+        self.client = odoorpc.ODOO(url, port=port, protocol=protocol)
+        self.initialized = False
 
         # Create cache for product and taxes
         self.products_cache = {}
-        self.taxes_cache ={}
+        self.taxes_cache = {}
+
+    def login(self):
+        """Login."""
+        self.client.login(self.db, self.user, self.password)
+        self.password = None
+        self.initialized = True
 
     def execute(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.execute(*args, **kwargs)
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
+        return self.client.execute(*args, **kwargs)
 
     def get(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.get(*args, **kwargs)
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
+        return self.client.get(*args, **kwargs)
 
     def read(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.read(*args, **kwargs)
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
+        return self.client.read(*args, **kwargs)
 
-    def search(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.search(*args, **kwargs)
+    def search(self, model, data):
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
 
-    def create(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.create(*args, **kwargs)
+        env = self.client.env[model]
+        return env.search(data)
 
-    def write(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.write(*args, **kwargs)
+    def create(self, model, data):
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
 
-    def write_record(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.write_record(*args, **kwargs)
-
-    def unlink(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.unlink(*args, **kwargs)
-
-    def unlink_record(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.unlink_record(*args, **kwargs)
+        env = self.client.env[model]
+        return env.create(data)
 
     def exec_workflow(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.exec_workflow(*args, **kwargs)
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
+        return self.client.exec_workflow(*args, **kwargs)
 
-    def browse(self, *args, **kwargs):
-        """Wrapper for oerplib call."""
-        return self.oerp.browse(*args, **kwargs)
+    def browse(self, model, ids):
+        """Wrapper for clientlib call."""
+        if not self.initialized:
+            self.login()
+
+        env = self.client.env[model]
+        return env.browse(ids)
 
     def fetch_product(self, vat_index):
         """Fetch product object in openerp and store into cash to avoid repetition
@@ -147,7 +148,7 @@ class Client(object):
         if not product_ids:
             raise Exception('%s is missing in product.product' % description)
         elif len(product_ids) > 1:
-            logger.warning('Got several ids', product_ids)
+            logging.warning('Got several ids', product_ids)
             raise Exception('More than one product %s' % description)
 
         product_id = product_ids[0]
@@ -166,7 +167,6 @@ class Client(object):
         0 mean no tax so return None
         """
 
-
         # Do we have cache ?
         if vat_index in self.taxes_cache:
             return self.taxes_cache[vat_index]
@@ -175,7 +175,13 @@ class Client(object):
         tax_id = None
 
         if vat_index == 'default':
-            tax_ids = self.execute('ir.values', 'get_default', 'product.product', 'supplier_taxes_id', True, 1, False)
+            tax_ids = self.execute('ir.values',
+                                   'get_default',
+                                   'product.product',
+                                   'supplier_taxes_id',
+                                   True,
+                                   1,
+                                   False)
             tax_id = tax_ids[0]
         elif float(vat_index) == float(0):
             return None
@@ -185,10 +191,10 @@ class Client(object):
             if not tax_ids:
                 raise Exception('tax %s is missing in account.tax' % vat_index)
             elif len(tax_ids) > 1:
-                logger.warning('Got several ids', tax_ids)
-                raise Exception('More than one tax with description = %s' % vat_index)
+                logging.warning('Got several ids', tax_ids)
+                raise Exception('More than one tax with description ' +
+                                '{0}'.format(vat_index))
             tax_id = tax_ids[0]
-
 
         # Check that configuration is correct
         if tax_id is None:
@@ -212,10 +218,10 @@ class Client(object):
         if not account_ids:
             raise Exception('Account %s not found' % code)
         elif len(account_ids) > 1:
-            raise Exception('Found multiple accounts with name %s' % name)
+            raise Exception('Found multiple accounts with code' +
+                            '{0}'.format(code))
 
         return self.browse('account.account', account_ids[0])
-
 
     def fetch_partner(self, name, customer=False, supplier=False):
         """Return openerp res.partner using name to search it
@@ -258,14 +264,14 @@ class Client(object):
         """
         return self.fetch_partner(name=name, supplier=True)
 
-
-    def create_invoice(self, invoice_data, lines_data, attachment_data=None, state='draft', tax_amount=None):
+    def create_invoice(self, invoice_data, lines_data,
+                       attachment_data=None, state='draft', tax_amount=None):
         """Global method that create an invoice and add lines to ir
 
         invoice_data : dict with  necessary information to create invoice
         lines_data : array with all lines data
         state : draft or open
-        tax_check : TODO 
+        tax_check : TODO
         """
 
         if not invoice_data:
@@ -276,19 +282,21 @@ class Client(object):
             raise Exception('State %s is not valid' % state)
 
         # Create invoice
-        logger.debug_debug('going to create invoice with', invoice_data)
+        logging.debug('going to create invoice with', invoice_data)
         invoice_id = self.create('account.invoice', invoice_data)
-        logger.debug_debug('created invoice %d' % invoice_id)
+        logging.debug('created invoice %d' % invoice_id)
 
         # Create invoice_line
         for line_data in lines_data:
             line_data['invoice_id'] = invoice_id
-            logger.debug_debug('going to create invoice_line with', line_data)
-            invoice_line_id = self.create('account.invoice.line', line_data) 
-            logger.debug_debug('created invoice.line %d' % invoice_line_id)
+            logging.debug('going to create invoice_line with', line_data)
+            invoice_line_id = self.create('account.invoice.line', line_data)
+            logging.debug('created invoice.line %d' % invoice_line_id)
 
         # Compute taxes
-        result = self.execute('account.invoice', 'button_reset_taxes', [invoice_id])
+        result = self.execute('account.invoice',
+                              'button_reset_taxes',
+                              [invoice_id])
         if not result:
             raise Exception('Unable to compute taxes, WTF')
 
@@ -299,18 +307,17 @@ class Client(object):
 
             # Check that we have only one tax line
             number_of_tax_lines = 0
-            ok_tax_line = None
 
             for tax_line in tax_lines:
-                ok_tax_line = tax_line
                 number_of_tax_lines += 1
-                logger.debug_debug('tax_line data', tax_line.__data__)
+                logging.debug('tax_line data', tax_line.__data__)
 
             if number_of_tax_lines == 0:
                 raise Exception('No tax yet, we should have')
 
             if number_of_tax_lines != 1:
-                # If vat_amount is present in ALL lines_data, fix amount if necessary
+                # If vat_amount is present in ALL lines_data
+                # fix amount if necessary
                 should_fix_vat = True
                 vat_data_to_fix = {}
                 for line_data in lines_data:
@@ -320,32 +327,37 @@ class Client(object):
                     else:
                         tax_test = line_data['invoice_line_tax_id']
                         if len(tax_test) != 1:
-                            logger.debug('I wont check tax, this is weird', tax_test)
+                            logging.debug('I wont check tax, this is weird',
+                                          tax_test)
                             should_fix_vat = False
                             break
                         # Weird tuple due to fields.Many2many in openerp
                         t1, t2, t3 = tax_test[0]
                         if len(t3) != 1:
-                            logger.debug('I wont check tax, this is weird2', t3)
+                            logging.debug('I wont check tax, this is weird2',
+                                          t3)
                             should_fix_vat = False
                             break
                         tax_id = t3[0]
                         # With this tax_id, fetch the tax_code_id
                         tax = self.browse('account.tax', tax_id)
                         if not tax:
-                            logger.warning('Unable to fetch account.tax {0}'.format(tax_id))
+                            logging.warning('Unable to fetch account.tax ' +
+                                            '{0}'.format(tax_id))
                             should_fix_vat = False
                             break
                         tax_code = tax.tax_code_id
                         vat_data_to_fix[tax_code.id] = line_data['vat_amount']
 
                 if should_fix_vat:
-                    logger.debug('Checking vat with', vat_data_to_fix)
+                    logging.debug('Checking vat with', vat_data_to_fix)
                     all_is_correct = True
                     for tax_line in invoice.tax_line:
                         tax_code_id = tax_line.tax_code_id.id
                         if tax_code_id not in vat_data_to_fix:
-                            logger.warning('Trying to fix tax not OK ????', tax_code_id, vat_data_to_fix)
+                            logging.warning('Trying to fix tax not OK ????',
+                                            tax_code_id,
+                                            vat_data_to_fix)
                             all_is_correct = False
                             break
                     if all_is_correct:
@@ -353,50 +365,55 @@ class Client(object):
                             tax_code_id = tax_line.tax_code_id.id
                             correct_amount = vat_data_to_fix[tax_code_id]
                             if tax_line.amount != correct_amount:
-                                message = 'Fix tax_line amount from %f to %f' % (tax_line.amount, correct_amount)
-                                if abs(tax_line.amount - correct_amount) > 0.80:
-                                    logger.warning(message)
+                                message = 'Fix tax_line amount ' +\
+                                          'from {0}'.format(tax_line.amount) +\
+                                          ' to {0}'.format(correct_amount)
+                                abs_amount = abs(tax_line.amount -
+                                                 correct_amount)
+                                if abs_amount > 0.80:
+                                    logging.warning(message)
                                 else:
-                                    logger.important(message)
+                                    logging.important(message)
                                 tax_line.amount = correct_amount
                                 self.write_record(tax_line)
 
                 else:
-                    logger.info('We have multiple lines with tax, skipping integrity check')
+                    logging.info('We have multiple lines with tax, ' +
+                                 'skipping integrity check')
                     if state != 'draft':
-                        logger.warning('But forcing state draft')
+                        logging.warning('But forcing state draft')
                         state = 'draft'
             else:
                 # Fix amount, might be wrong usually one cents wrong
                 if tax_line.amount != tax_amount:
-                    message = 'Fix tax_line amount from %f to %f' % (tax_line.amount, tax_amount)
+                    message = 'Fix tax_line amount ' +\
+                              'from {0} '.format(tax_line.amount) +\
+                              'to {0}'.format(tax_amount)
                     if abs(tax_line.amount - tax_amount) > 0.80:
-                        logger.warning(message)
+                        logging.warning(message)
                     else:
-                        logger.important(message)
+                        logging.important(message)
 
                     tax_line.amount = tax_amount
 
                     # Update invoice : need to check parameters
                     self.write_record(tax_line)
-                    logger.log('tax_line updated')
-
+                    logging.log('tax_line updated')
 
         if state == 'open':
-            logger.debug_debug('going to execute workflow invoice_open')
+            logging.debug('going to execute workflow invoice_open')
             self.exec_workflow('account.invoice', 'invoice_open', invoice_id)
 
         if attachment_data:
-            logger.debug_debug('going to attach some data to invoice')
+            logging.debug('going to attach some data to invoice')
 
             invoice = self.browse('account.invoice', invoice_id)
             attachment_data['res_id'] = invoice.id
-            if invoice.number: 
+            if invoice.number:
                 attachment_data['res_name'] = invoice.number
 
             attachment_id = self.create('ir.attachment', attachment_data)
-            logger.debug_debug('attached file %s to invoice, id=%d' % (attachment_data['name'], attachment_id))
+            logging.debug('attached file {0} '.format(attachment_data['name']),
+                          ' to invoice, id={0}'.format(attachment_id))
 
         return invoice_id
-
-

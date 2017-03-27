@@ -33,7 +33,7 @@ import os
 
 try:
     from ConfigParser import RawConfigParser, NoSectionError, NoOptionError
-except ImportError: # pragma: no cover
+except ImportError:  # pragma: no cover
     # Python 3
     from configparser import RawConfigParser, NoSectionError, NoOptionError
 
@@ -45,6 +45,7 @@ CONFIG_PATH = [
     os.path.expanduser('~/.odoo.conf'),
     os.path.realpath('./odoo.conf'),
 ]
+
 
 class ConfigurationManager(object):
     '''
@@ -62,20 +63,14 @@ class ConfigurationManager(object):
         '''
         Load parameter ``name`` from configuration, respecting priority order.
         Most of the time, ``section`` will correspond to the current api
-        ``endpoint``. ``default`` section only contains ``endpoint`` and general
-        configuration.
+        ``endpoint``. ``default`` section only contains ``endpoint`` and
+        general configuration.
 
         :param str section: configuration section or region name. Ignored when
             looking in environment
         :param str name: configuration parameter to lookup
         '''
-        # 1/ try env
-        try:
-            return os.environ['OVH_'+name.upper()]
-        except KeyError:
-            pass
-
-        # 2/ try from specified section/endpoint
+        # try from specified section/endpoint
         try:
             return self.config.get(section, name)
         except (NoSectionError, NoOptionError):
@@ -87,6 +82,7 @@ class ConfigurationManager(object):
     def read(self, config_file):
         # Read an other config file
         self.config.read(config_file)
+
 
 #: System wide instance :py:class:`ConfigurationManager` instance
 config = ConfigurationManager()
