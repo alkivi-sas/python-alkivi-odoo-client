@@ -1,60 +1,41 @@
-python-alkivi-logger
+python-alkivi-odoo-client
 ==========================
 
-[![Build Status](https://travis-ci.org/alkivi-sas/python-alkivi-logger.svg?branch=master)](https://travis-ci.org/alkivi-sas/python-alkivi-logger)
-[![Requirements Status](https://requires.io/github/alkivi-sas/python-alkivi-logger/requirements.svg?branch=master)](https://requires.io/github/alkivi-sas/python-alkivi-logger/requirements/?branch=master)
+[![Build Status](https://travis-ci.org/alkivi-sas/python-alkivi-odoo-client.svg?branch=master)](https://travis-ci.org/alkivi-sas/python-alkivi-odoo-client)
+[![Requirements Status](https://requires.io/github/alkivi-sas/python-alkivi-odoo-client/requirements.svg?branch=master)](https://requires.io/github/alkivi-sas/python-alkivi-odoo-client/requirements/?branch=master)
 
-Python logger used at Alkivi
+Odoo python client used at Alkivi.
+Based on odoorpc on which we add additional fonction.
 
 ## Package
 
 Example
 
 ```python
-from alkivi import logger as _logger
-import logging
+from alkivi.odoo import client as odoo
 
-#
-# Define Logger
-#
-logger = _logger.Logger(
-        min_log_level_to_mail   = logging.ERROR,
-        min_log_level_to_save   = logging.DEBUG,
-        min_log_level_to_print  = logging.DEBUG,
-        min_log_level_to_syslog = None,
-        emails=['anthony@alkivi.fr'])
+client = odoo.Client()
+# TODO
+```
 
-#
-# Basic usage
-#
-logger.debug_debug('This is a very low level debug')
-logger.debug('This is a debug comment')
-logger.log('This is a basic log')
-logger.info('This is a info comment')
-logger.important('This is an important comment')
-logger.warning('This is a warning comment')
-logger.error('This is a error comment')
-logger.critical('THis is very dangerous, please have a look !')
+Configuration is taken from ~/odoo.conf $HOME/.odoo.conf or /etc/odoo.conf
 
-#
-# Now let's do some loop
-#
-logger.new_loop_logger()
-for i in range(0, 11):
-    logger.new_iteration(prefix='i=%i' % (i))
-    logger.debug("We are now prefixing all logger")
-    if i == 9:
-        logger.debug("Lets do another loop")
-        logger.new_loop_logger()
-        for j in range(0, 5):
-            logger.new_iteration(prefix='j=%i' % (j))
-            logger.debug("Alkivi pow@")
+Example conf
 
-        # Dont forget to close logger or shit will happen
-        logger.del_loop_logger()
+```ini
+[default]
+; general configuration: default endpoint
+endpoint=dev
 
-logger.del_loop_logger()
-logger.debug('We now remove an loop, thus a prefix')
+[dev]
+; configuration specific to 'dev' endpoint
+protocol=jsonrpc+ssl
+port=443
+url=odoo.domain
+version=8.0
+db=odooDatabase
+user=pdooUser
+password=AweSomePasswOrd
 ```
 
 ## Tests
