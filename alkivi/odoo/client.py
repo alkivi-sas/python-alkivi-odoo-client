@@ -88,11 +88,11 @@ class Client(object):
             self.login()
         return self.client.execute(*args, **kwargs)
 
-    def get(self, *args, **kwargs):
+    def get(self, model):
         """Wrapper for clientlib call."""
         if not self.initialized:
             self.login()
-        return self.client.get(*args, **kwargs)
+        return self.client.env[model]
 
     def read(self, *args, **kwargs):
         """Wrapper for clientlib call."""
