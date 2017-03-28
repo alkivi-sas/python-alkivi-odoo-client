@@ -14,13 +14,22 @@ Example
 ```python
 from alkivi.odoo import client as odoo
 
+# Using default configuration
 client = odoo.Client()
+
+# Using specific endpoint
+client = odoo.Client(endpoint='prod')
 # TODO
 ```
 
-Configuration is taken from ~/odoo.conf $HOME/.odoo.conf or /etc/odoo.conf
+## Credentials
 
-Example conf
+Credentials are fetched from, in priority order:
+- ./odoo.conf (script directory)
+- $HOME/.odoo.conf
+- /etc/odoo.conf
+
+Example
 
 ```ini
 [default]
@@ -36,6 +45,9 @@ version=8.0
 db=odooDatabase
 user=pdooUser
 password=AweSomePasswOrd
+
+[prod]
+; other configuration
 ```
 
 ## Tests
