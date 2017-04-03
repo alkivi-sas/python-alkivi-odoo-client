@@ -458,7 +458,6 @@ class Client(object):
                                 else:
                                     self.logger.info(message)
                                 tax_line.amount = correct_amount
-                                self.write_record(tax_line)
 
                 else:
                     self.logger.info('We have multiple lines with tax, ' +
